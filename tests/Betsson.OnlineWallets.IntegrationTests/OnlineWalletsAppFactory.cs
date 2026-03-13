@@ -12,16 +12,16 @@ namespace Betsson.OnlineWallets.IntegrationTests
     {
         public class OnlineWalletsAppFactory : WebApplicationFactory<Program>
         {
+            private readonly Action<IServiceCollection> _configureServices;
+
+            public OnlineWalletsAppFactory(Action<IServiceCollection> configureServices)
+            {
+                _configureServices = configureServices;
+            }
+
             protected override void ConfigureWebHost(IWebHostBuilder builder)
             {
-                var mock = Substitute.For<IOnlineWalletRepository>();
-                var onlineWalletEntry = new OnlineWalletEntry { Amount = 0m, BalanceBefore = 10m };
-                mock.GetLastOnlineWalletEntryAsync().Returns(onlineWalletEntry);
-
-                builder.ConfigureServices(services =>
-                {
-                    services.AddScoped<IOnlineWalletRepository>(p => mock);
-                });
+                builder.ConfigureServices(_configureServices);
                 base.ConfigureWebHost(builder);
             }
         }
