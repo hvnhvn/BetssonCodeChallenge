@@ -21,6 +21,35 @@ namespace Betsson.OnlineWallets.IntegrationTests
             new object[] { decimal.MaxValue }
         };
 
+        private static object[] Deposit_PositiveCase_NoEntries =
+        {
+            new object[] { 0m },
+            new object[] { 1m },
+            new object[] { decimal.MaxValue }
+        };
+
+        private static object[] Deposit_PositiveCases =
+        {
+            new object[] { 0m, -1m, -1m },
+            new object[] { 0m, 0m, 0m },
+            new object[] { 0m, 1m, 1m },
+            new object[] { 0m, decimal.MaxValue, decimal.MaxValue },
+            new object[] { 1m, -1m, 0m },
+            new object[] { 1m, 0m, 1m },
+            new object[] { 1m, 1m, 2m },
+            new object[] { 1m, decimal.MaxValue - 1m, decimal.MaxValue },
+            new object[] { decimal.MaxValue - 1m, -1m, decimal.MaxValue - 2m },
+            new object[] { decimal.MaxValue - 1m, 0m, decimal.MaxValue - 1m },
+            new object[] { decimal.MaxValue - 1m, 1m, decimal.MaxValue },
+            new object[] { decimal.MaxValue, 0m, decimal.MaxValue }
+        };
+
+        private static readonly object[] Deposit_NegativeCases =
+        {
+            // overflow
+            // incorrect input
+        };
+
         [SetUp]
         public void Setup()
         {
@@ -73,65 +102,39 @@ namespace Betsson.OnlineWallets.IntegrationTests
 
 
 
-        [Test]
-        public async Task Deposit()
+        [TestCaseSource(nameof(Deposit_PositiveCase_NoEntries))]
+        public async Task PostDeposit_ShouldReturnCorrectBalance_WhenThereWereNoEntries(decimal depositAmount)
         {
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-            };
+            var request = new DepositRequest { Amount = depositAmount };
 
-            var payload = JsonContent.Create(new DepositRequest { Amount = 5m });
+            var response = await _httpClient.PostAsJsonAsync("/onlinewallet/deposit", request);
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
 
-            var response = await _httpClient.PostAsync("/onlinewallet/deposit", payload);
-
-            Assert.That((int)response.StatusCode, Is.EqualTo(200));
-
-            var body = await response.Content.ReadAsStringAsync();
-            var balance = JsonSerializer.Deserialize<BalanceResponse>(body, options);
-            Assert.That(balance.Amount, Is.EqualTo(5m));
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(depositAmount));
         }
 
-        [Test]
-        public async Task DepositAndCheck()
+        [TestCaseSource(nameof(Deposit_PositiveCases))]
+        public async Task PostDeposit_ShouldReturnCorrectBalance(decimal depositAmount, decimal balance, decimal expectedNewBalance)
         {
-            var options = new JsonSerializerOptions
+            var onlineWalletEntry = new OnlineWalletEntry
             {
-                PropertyNameCaseInsensitive = true,
+                Amount = 0,
+                BalanceBefore = balance
             };
+            await _repositoryMock.InsertOnlineWalletEntryAsync(onlineWalletEntry);
+            var request = new DepositRequest { Amount = depositAmount };
 
-            var payload = JsonContent.Create(new DepositRequest { Amount = 5m });
+            var response = await _httpClient.PostAsJsonAsync("/onlinewallet/deposit", request);
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
 
-            var response = await _httpClient.PostAsync("/onlinewallet/deposit", payload);
-            Assert.That((int)response.StatusCode, Is.EqualTo(200));
-
-            var body = await response.Content.ReadAsStringAsync();
-            var balance = JsonSerializer.Deserialize<BalanceResponse>(body, options);
-            Assert.That(balance.Amount, Is.EqualTo(5m));
-
-            response = await _httpClient.GetAsync("/onlinewallet/balance");
-            Assert.That((int)response.StatusCode, Is.EqualTo(200));
-
-            body = await response.Content.ReadAsStringAsync();
-            balance = JsonSerializer.Deserialize<BalanceResponse>(body, options);
-            Assert.That(balance.Amount, Is.EqualTo(5m));
-
-
-
-            response = await _httpClient.PostAsync("/onlinewallet/deposit", payload);
-            Assert.That((int)response.StatusCode, Is.EqualTo(200));
-
-            body = await response.Content.ReadAsStringAsync();
-            balance = JsonSerializer.Deserialize<BalanceResponse>(body, options);
-            Assert.That(balance.Amount, Is.EqualTo(10m));
-
-            response = await _httpClient.GetAsync("/onlinewallet/balance");
-            Assert.That((int)response.StatusCode, Is.EqualTo(200));
-
-            body = await response.Content.ReadAsStringAsync();
-            balance = JsonSerializer.Deserialize<BalanceResponse>(body, options);
-            Assert.That(balance.Amount, Is.EqualTo(10m));
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(expectedNewBalance));
         }
+
+
 
         
     }
