@@ -1,3 +1,4 @@
+using Betsson.OnlineWallets.Data.Models;
 using Betsson.OnlineWallets.Data.Repositories;
 using Betsson.OnlineWallets.IntegrationTests.Betsson.OnlineWallets.Web.ApiTests;
 using Betsson.OnlineWallets.IntegrationTests.Mocks;
@@ -10,9 +11,15 @@ namespace Betsson.OnlineWallets.IntegrationTests
 {
     public class Tests
     {
+        private IOnlineWalletRepository? _repositoryMock;
         private OnlineWalletsAppFactory? _appFactory;
         private HttpClient? _httpClient;
 
+        private static object[] Balance_PositiveCases =
+        {
+            new object[] { 10m },
+            new object[] { decimal.MaxValue }
+        };
 
         [SetUp]
         public void Setup()
@@ -29,25 +36,42 @@ namespace Betsson.OnlineWallets.IntegrationTests
 
         void ConfigureServices(IServiceCollection collection)
         {
-            var _repositoryMock = new OnlineWalletRepositoryMock();
+            _repositoryMock = new OnlineWalletRepositoryMock();
             collection.AddScoped<IOnlineWalletRepository>(_ => _repositoryMock);
         }
+
         [Test]
-        public async Task Balance()
+        public async Task GetBalance_InitialBalanceShouldBeZero()
         {
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-            };
-            
             var response = await _httpClient.GetAsync("/onlinewallet/balance");
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
 
-            Assert.That((int)response.StatusCode, Is.EqualTo(200));
-
-            var body = await response.Content.ReadAsStringAsync();
-            var balance = JsonSerializer.Deserialize<BalanceResponse>(body, options);
-            Assert.That(balance.Amount, Is.EqualTo(0m));
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.Zero);
         }
+
+        [TestCaseSource(nameof(Balance_PositiveCases))]
+        public async Task GetBalance_ShouldReturnCorrectBalance(decimal balance)
+        {
+            var onlineWalletEntry = new OnlineWalletEntry
+            {
+                Amount = 0,
+                BalanceBefore = balance,
+            };
+            await _repositoryMock.InsertOnlineWalletEntryAsync(onlineWalletEntry);
+
+            var response = await _httpClient.GetAsync("/onlinewallet/balance");
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(balance));
+
+        }
+
+
+
 
         [Test]
         public async Task Deposit()
@@ -108,5 +132,7 @@ namespace Betsson.OnlineWallets.IntegrationTests
             balance = JsonSerializer.Deserialize<BalanceResponse>(body, options);
             Assert.That(balance.Amount, Is.EqualTo(10m));
         }
+
+        
     }
 }
