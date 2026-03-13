@@ -2,6 +2,7 @@ using Betsson.OnlineWallets.Data.Models;
 using Betsson.OnlineWallets.Data.Repositories;
 using Betsson.OnlineWallets.IntegrationTests.Betsson.OnlineWallets.Web.ApiTests;
 using Betsson.OnlineWallets.IntegrationTests.Mocks;
+using Betsson.OnlineWallets.IntegrationTests.Models;
 using Betsson.OnlineWallets.Web.Models;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Http.Json;
@@ -44,10 +45,22 @@ namespace Betsson.OnlineWallets.IntegrationTests
             new object[] { decimal.MaxValue, 0m, decimal.MaxValue }
         };
 
-        private static readonly object[] Deposit_NegativeCases =
+        private static object[] Deposit_NegativeCases_NegativeInput =
         {
-            // overflow
-            // incorrect input
+            new object[] { -1m, 0m },
+            new object[] { -1m, 1m }
+        };
+
+        private static object[] Deposit_NegativeCases_OverflowingBalance =
+        {
+            new object[] { 1m, decimal.MaxValue },
+            new object[] { decimal.MaxValue, 1m },
+        };
+
+        private static object[] Deposit_NegativeCases_IncorrectType =
+        {
+            new object[] { "qweasd", 0m },
+            new object[] { "7922816251426433759354395033400000", 0m }
         };
 
         [SetUp]
@@ -134,8 +147,72 @@ namespace Betsson.OnlineWallets.IntegrationTests
             Assert.That(balanceResponse.Amount, Is.EqualTo(expectedNewBalance));
         }
 
+        [TestCaseSource(nameof(Deposit_NegativeCases_NegativeInput))]
+        public async Task PostDeposit_ShouldNotProcessNegativeInput(decimal depositAmount, decimal balance)
+        {
+            var onlineWalletEntry = new OnlineWalletEntry
+            {
+                Amount = 0,
+                BalanceBefore = balance
+            };
+            await _repositoryMock.InsertOnlineWalletEntryAsync(onlineWalletEntry);
+            var request = new DepositRequest { Amount = depositAmount };
+
+            var response = await _httpClient.PostAsJsonAsync("/onlinewallet/deposit", request);
+            Assert.That((int)response.StatusCode, Is.EqualTo(400));
+
+            response = await _httpClient.GetAsync("/onlinewallet/balance");
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(balance));
+        }
+
+        [TestCaseSource(nameof(Deposit_NegativeCases_OverflowingBalance))]
+        public async Task PostDeposit_ShouldNotDepositFunds_WhenBalanceGetsOverflown(decimal depositAmount, decimal balance)
+        {
+            var onlineWalletEntry = new OnlineWalletEntry
+            {
+                Amount = 0,
+                BalanceBefore = balance
+            };
+            await _repositoryMock.InsertOnlineWalletEntryAsync(onlineWalletEntry);
+            var request = new DepositRequest { Amount = depositAmount };
+
+            var response = await _httpClient.PostAsJsonAsync("/onlinewallet/deposit", request);
+            Assert.That((int)response.StatusCode, Is.EqualTo(500));
+
+            response = await _httpClient.GetAsync("/onlinewallet/balance");
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(balance));
+        }
+
+        [TestCaseSource(nameof(Deposit_NegativeCases_IncorrectType))]
+        public async Task PostDeposit_ShouldNotProcess_WhenInputHasIncorrectType(string input, decimal balance)
+        {
+            var onlineWalletEntry = new OnlineWalletEntry
+            {
+                Amount = 0,
+                BalanceBefore = balance
+            };
+            await _repositoryMock.InsertOnlineWalletEntryAsync(onlineWalletEntry);
+            var request = new IncorrectDepositRequest { Amount = input };
+
+            var response = await _httpClient.PostAsJsonAsync("/onlinewallet/deposit", request);
+            Assert.That((int)response.StatusCode, Is.EqualTo(400));
+
+            response = await _httpClient.GetAsync("/onlinewallet/balance");
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(balance));
+        }
 
 
-        
     }
 }
