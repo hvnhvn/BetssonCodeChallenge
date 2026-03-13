@@ -6,11 +6,10 @@ using NSubstitute;
 
 namespace Betsson.OnlineWallets.UnitTests
 {
-    public class Tests
+    public class OnlineWalletServiceFixture
     {
-        static object[] GetBalance_PositiveCases =
+        private static readonly object[] GetBalance_PositiveCases =
         {
-
             new object[] { -1m, -1m, -2m },
             new object[] { -1m, 0m, -1m },
             new object[] { -2m, 1m, -1m },
@@ -33,7 +32,7 @@ namespace Betsson.OnlineWallets.UnitTests
             new object[] { 1m, decimal.MaxValue - 1m, decimal.MaxValue },
         };
 
-        static object[] GetBalance_NegativeCases =
+        private static readonly object[] GetBalance_NegativeCases =
         {
             new object[] { decimal.MaxValue, 1m },
             new object[] { 1m, decimal.MaxValue },
@@ -41,7 +40,7 @@ namespace Betsson.OnlineWallets.UnitTests
             new object[] { -1m, decimal.MinValue },
         };
 
-        static object[] DepositFunds_PositiveCases =
+        private static readonly object[] DepositFunds_PositiveCases =
         {
             new object[] { 0m, -1m, -1m },
             new object[] { 0m, 0m, 0m },
@@ -58,19 +57,19 @@ namespace Betsson.OnlineWallets.UnitTests
             new object[] { decimal.MaxValue - 1m, 1m, decimal.MaxValue },
         };
 
-        static object[] DepositFunds_NegativeCases_BalanceExceedsMaxValue =
+        private static readonly object[] DepositFunds_NegativeCases_BalanceExceedsMaxValue =
         {
             new object[] { decimal.MaxValue, 1m },
             new object[] { 1m, decimal.MaxValue }
         };
 
-        static object[] DepositFunds_NegativeCases_NegativeInput =
+        private static readonly object[] DepositFunds_NegativeCases_NegativeInput =
         {
             new object[] { -1m },
             new object[] { decimal.MinValue }
         };
 
-        static object[] WithdrawFunds_PositiveCases =
+        private static readonly object[] WithdrawFunds_PositiveCases =
         {
             new object[] { 0m, 0m, 0m },
             new object[] { 0m, 1m, 1m },
@@ -83,7 +82,7 @@ namespace Betsson.OnlineWallets.UnitTests
             new object[] { decimal.MaxValue, decimal.MaxValue, 0m },
         };
 
-        static object[] WithdrawFunds_NegativeCases_BalanceTooLow =
+        private static readonly object[] WithdrawFunds_NegativeCases_BalanceTooLow =
         {
             new object[] { 0m, -1m },
             new object[] { 1m, -1m },
@@ -92,12 +91,11 @@ namespace Betsson.OnlineWallets.UnitTests
             new object[] { decimal.MaxValue, decimal.MaxValue - 1m },
         };
 
-        static object[] WithdrawFunds_NegativeCases_NegativeInput =
+        private static readonly object[] WithdrawFunds_NegativeCases_NegativeInput =
         {
             new object[] { -1m },
             new object[] { decimal.MinValue }
         };
-
 
         [Test]
         public async Task GetBalanceAsync_ShouldReturnZeroBalance_WhenLastOnlineWalletEntryIsDefault()
@@ -147,8 +145,6 @@ namespace Betsson.OnlineWallets.UnitTests
                 "GetBalanceAsync() should've thrown OverflowException on incorrect input data!");
         }
 
-
-
         [TestCaseSource(nameof(DepositFunds_PositiveCases))]
         public async Task DepositFundsAsync_ShouldInsertCorrectOnlineWalletEntry_AndReturnCorrectBalance(
             decimal deposit, decimal currentBalanceValue, decimal expectedNewBalance)
@@ -190,7 +186,6 @@ namespace Betsson.OnlineWallets.UnitTests
             var sut = new OnlineWalletService(onlineWalletRepository);
             var currentBalance = await sut.GetBalanceAsync();
 
-
             Assert.ThrowsAsync<OverflowException>(async () =>
                 await sut.DepositFundsAsync(new Models.Deposit { Amount = deposit }),
                 "DepositFundsAsync() should've thrown OverflowException on incorrect data!");
@@ -214,8 +209,6 @@ namespace Betsson.OnlineWallets.UnitTests
             // Additionally checks that the method didn't produce a new OnlineWalletEntry
             await onlineWalletRepository.DidNotReceiveWithAnyArgs().InsertOnlineWalletEntryAsync(default);
         }
-
-
 
         [TestCaseSource(nameof(WithdrawFunds_PositiveCases))]
         public async Task WithdrawFundsAsync_ShouldInsertCorrectOnlineWalletEntry_AndReturnCorrectBalance(
