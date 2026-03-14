@@ -1,9 +1,6 @@
-﻿using Betsson.OnlineWallets.Data.Models;
-using Betsson.OnlineWallets.Data.Repositories;
-using Betsson.OnlineWallets.Web;
+﻿using Betsson.OnlineWallets.Web;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using NSubstitute;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Betsson.OnlineWallets.IntegrationTests
@@ -26,5 +23,4 @@ namespace Betsson.OnlineWallets.IntegrationTests
             }
         }
     }
-
 }
