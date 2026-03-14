@@ -63,6 +63,37 @@ namespace Betsson.OnlineWallets.IntegrationTests
             new object[] { "7922816251426433759354395033400000", 0m }
         };
 
+        private static object[] Withdraw_PositiveCases =
+        {
+            new object[] { 0m, 0m, 0m },
+            new object[] { 0m, 1m, 1m },
+            new object[] { 0m, decimal.MaxValue, decimal.MaxValue },
+            new object[] { 1m, 1m, 0m },
+            new object[] { 1m, 2m, 1m },
+            new object[] { 1m, decimal.MaxValue, decimal.MaxValue - 1m },
+            new object[] { decimal.MaxValue - 1m, decimal.MaxValue, 1m },
+            new object[] { decimal.MaxValue, decimal.MaxValue, 0m }
+        };
+
+        private static object[] Withdraw_NegativeCases_NegativeInput =
+        {
+            new object[] { -1m, -1m },
+            new object[] { -1m, 0m }
+        };
+
+        private static object[] Withdraw_NegativeCases_BalanceIsTooLow =
+        {
+            new object[] { 0m, -1m },
+            new object[] { 1m, 0m },
+            new object[] { decimal.MaxValue, decimal.MaxValue - 1m },
+        };
+
+        private static object[] Withdraw_NegativeCases_IncorrectType =
+        {
+            new object[] { "qweasd", decimal.MaxValue },
+            new object[] { "7922816251426433759354395033400000", decimal.MaxValue }
+        };
+
         [SetUp]
         public void Setup()
         {
@@ -213,6 +244,102 @@ namespace Betsson.OnlineWallets.IntegrationTests
             Assert.That(balanceResponse.Amount, Is.EqualTo(balance));
         }
 
+        [Test]
+        public async Task PostWithdraw_ShouldBeAbleToWithdrawZeroFunds_WhenThereWereNoEntries()
+        {
+            var request = new WithdrawalRequest { Amount = 0m };
 
+            var response = await _httpClient.PostAsJsonAsync("/onlinewallet/withdraw", request);
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(0m));
+        }
+
+        [TestCaseSource(nameof(Withdraw_PositiveCases))]
+        public async Task PostWithdraw_ShouldReturnCorrectBalance(decimal withdrawAmount, decimal balance, decimal expectedNewBalance)
+        {
+            var onlineWalletEntry = new OnlineWalletEntry
+            {
+                Amount = 0,
+                BalanceBefore = balance
+            };
+            await _repositoryMock.InsertOnlineWalletEntryAsync(onlineWalletEntry);
+            var request = new WithdrawalRequest { Amount = withdrawAmount };
+
+            var response = await _httpClient.PostAsJsonAsync("/onlinewallet/withdraw", request);
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(expectedNewBalance));
+        }
+
+        [TestCaseSource(nameof(Withdraw_NegativeCases_NegativeInput))]
+        public async Task PostWithdraw_ShouldNotProcessNegativeInput(decimal withdrawAmount, decimal balance)
+        {
+            var onlineWalletEntry = new OnlineWalletEntry
+            {
+                Amount = 0,
+                BalanceBefore = balance
+            };
+            await _repositoryMock.InsertOnlineWalletEntryAsync(onlineWalletEntry);
+            var request = new DepositRequest { Amount = withdrawAmount };
+
+            var response = await _httpClient.PostAsJsonAsync("/onlinewallet/withdraw", request);
+            Assert.That((int)response.StatusCode, Is.EqualTo(400));
+
+            response = await _httpClient.GetAsync("/onlinewallet/balance");
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(balance));
+        }
+
+        [TestCaseSource(nameof(Withdraw_NegativeCases_BalanceIsTooLow))]
+        public async Task PostWithdraw_ShouldNotWithdrawFunds_WhenBalanceIsTooLow(decimal withdrawAmount, decimal balance)
+        {
+            var onlineWalletEntry = new OnlineWalletEntry
+            {
+                Amount = 0,
+                BalanceBefore = balance
+            };
+            await _repositoryMock.InsertOnlineWalletEntryAsync(onlineWalletEntry);
+            var request = new WithdrawalRequest { Amount = withdrawAmount };
+
+            var response = await _httpClient.PostAsJsonAsync("/onlinewallet/withdraw", request);
+            Assert.That((int)response.StatusCode, Is.EqualTo(400));
+
+            response = await _httpClient.GetAsync("/onlinewallet/balance");
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(balance));
+        }
+
+        [TestCaseSource(nameof(Withdraw_NegativeCases_IncorrectType))]
+        public async Task PostWithdraw_ShouldNotProcess_WhenInputHasIncorrectType(string input, decimal balance)
+        {
+            var onlineWalletEntry = new OnlineWalletEntry
+            {
+                Amount = 0,
+                BalanceBefore = balance
+            };
+            await _repositoryMock.InsertOnlineWalletEntryAsync(onlineWalletEntry);
+            var request = new IncorrectWithdrawalRequest { Amount = input };
+
+            var response = await _httpClient.PostAsJsonAsync("/onlinewallet/withdraw", request);
+            Assert.That((int)response.StatusCode, Is.EqualTo(400));
+
+            response = await _httpClient.GetAsync("/onlinewallet/balance");
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(balance));
+        }
     }
 }
