@@ -3,6 +3,7 @@ using Betsson.OnlineWallets.Data.Repositories;
 using Betsson.OnlineWallets.IntegrationTests.Betsson.OnlineWallets.Web.ApiTests;
 using Betsson.OnlineWallets.IntegrationTests.Mocks;
 using Betsson.OnlineWallets.IntegrationTests.Models;
+using Betsson.OnlineWallets.Models;
 using Betsson.OnlineWallets.Web.Models;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Http.Json;
@@ -18,6 +19,7 @@ namespace Betsson.OnlineWallets.IntegrationTests
 
         private static object[] Balance_PositiveCases =
         {
+            new object[] { decimal.MinValue },
             new object[] { 10m },
             new object[] { decimal.MaxValue }
         };
@@ -31,14 +33,17 @@ namespace Betsson.OnlineWallets.IntegrationTests
 
         private static object[] Deposit_PositiveCases =
         {
+            new object[] { 0m, decimal.MinValue, decimal.MinValue },
             new object[] { 0m, -1m, -1m },
             new object[] { 0m, 0m, 0m },
             new object[] { 0m, 1m, 1m },
             new object[] { 0m, decimal.MaxValue, decimal.MaxValue },
+            new object[] { 1m, decimal.MinValue, decimal.MinValue + 1m },
             new object[] { 1m, -1m, 0m },
             new object[] { 1m, 0m, 1m },
             new object[] { 1m, 1m, 2m },
             new object[] { 1m, decimal.MaxValue - 1m, decimal.MaxValue },
+            new object[] { decimal.MaxValue - 1m, decimal.MinValue, -1m },
             new object[] { decimal.MaxValue - 1m, -1m, decimal.MaxValue - 2m },
             new object[] { decimal.MaxValue - 1m, 0m, decimal.MaxValue - 1m },
             new object[] { decimal.MaxValue - 1m, 1m, decimal.MaxValue },
@@ -59,6 +64,7 @@ namespace Betsson.OnlineWallets.IntegrationTests
 
         private static object[] Deposit_NegativeCases_IncorrectType =
         {
+            new object[] { "", 0m },
             new object[] { "qweasd", 0m },
             new object[] { "7922816251426433759354395033400000", 0m }
         };
@@ -83,6 +89,7 @@ namespace Betsson.OnlineWallets.IntegrationTests
 
         private static object[] Withdraw_NegativeCases_BalanceIsTooLow =
         {
+            new object[] { 0m, decimal.MinValue },
             new object[] { 0m, -1m },
             new object[] { 1m, 0m },
             new object[] { decimal.MaxValue, decimal.MaxValue - 1m },
@@ -90,8 +97,14 @@ namespace Betsson.OnlineWallets.IntegrationTests
 
         private static object[] Withdraw_NegativeCases_IncorrectType =
         {
+            new object[] { "", decimal.MaxValue },
             new object[] { "qweasd", decimal.MaxValue },
             new object[] { "7922816251426433759354395033400000", decimal.MaxValue }
+        };
+
+        private static object[] MixedScenario =
+        {
+            new object[] { 3m, 4m, 5m, 2m }
         };
 
         [SetUp]
@@ -340,6 +353,41 @@ namespace Betsson.OnlineWallets.IntegrationTests
 
             Assert.That(balanceResponse, Is.Not.Null);
             Assert.That(balanceResponse.Amount, Is.EqualTo(balance));
+        }
+
+        [TestCaseSource(nameof(MixedScenario))]
+        public async Task MixedScenario_ShouldReturnCorrectBalance_AfterAChainOfRequests(
+            decimal balance, decimal depositAmount, decimal withdrawAmount, decimal expectedNewBalance)
+        {
+            var onlineWalletEntry = new OnlineWalletEntry
+            {
+                Amount = 0,
+                BalanceBefore = balance
+            };
+            await _repositoryMock.InsertOnlineWalletEntryAsync(onlineWalletEntry);
+            var depositRequest = new DepositRequest { Amount = depositAmount };
+            var withdrawalRequest = new WithdrawalRequest { Amount = withdrawAmount };
+
+            var response = await _httpClient.PostAsJsonAsync("/onlinewallet/deposit", depositRequest);
+            response.EnsureSuccessStatusCode();
+            var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(balance + depositAmount));
+
+            response = await _httpClient.PostAsJsonAsync("/onlinewallet/withdraw", withdrawalRequest);
+            response.EnsureSuccessStatusCode();
+            balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(expectedNewBalance));
+
+            response = await _httpClient.GetAsync("/onlinewallet/balance");
+            response.EnsureSuccessStatusCode();
+            balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
+
+            Assert.That(balanceResponse, Is.Not.Null);
+            Assert.That(balanceResponse.Amount, Is.EqualTo(expectedNewBalance));
         }
     }
 }
