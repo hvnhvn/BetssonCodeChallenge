@@ -4,10 +4,15 @@ using System.Net.Http.Json;
 
 namespace Betsson.OnlineWallets.SystemTests
 {
+    [TestFixture]
     [Timeout(3000)]
-    public class OnlineWalletControllerFixture
+    [NonParallelizable]
+    public class OnlineWalletApiMultiRequestTests
     {
-        private HttpClient _httpClient;
+        private HttpClient? _httpClient;
+
+        private static readonly Uri BaseAddress =
+            new("http://localhost:8080");
 
         private static readonly object[] MutuallyExclusiveWithdrawals =
         {
@@ -24,16 +29,15 @@ namespace Betsson.OnlineWallets.SystemTests
             new object[] { 1m, 100 }
         };
 
-        [OneTimeSetUp]
-        public void OneTimeSetup()
-        {
-            _httpClient = new HttpClient();
-        }
-
         [SetUp]
         public async Task Setup()
         {
-            var response = await _httpClient.GetAsync("http://localhost:8080/onlinewallet/balance");
+            _httpClient = new HttpClient
+            {
+                BaseAddress = BaseAddress
+            };
+
+            var response = await _httpClient.GetAsync("onlinewallet/balance");
             response.EnsureSuccessStatusCode();
             var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
             Assert.That(balanceResponse, Is.Not.Null);
@@ -43,7 +47,7 @@ namespace Betsson.OnlineWallets.SystemTests
             if (balanceResponse.Amount > 0m)
             {
                 var request = new WithdrawalRequest { Amount = balanceResponse.Amount };
-                response = await _httpClient.PostAsJsonAsync("http://localhost:8080/onlinewallet/withdraw", request);
+                response = await _httpClient.PostAsJsonAsync("onlinewallet/withdraw", request);
                 response.EnsureSuccessStatusCode();
                 balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
                 Assert.That(balanceResponse, Is.Not.Null);
@@ -51,10 +55,10 @@ namespace Betsson.OnlineWallets.SystemTests
             }
         }
 
-        [OneTimeTearDown]
-        public void OneTimeTearDown()
+        [TearDown]
+        public void TearDown()
         {
-            _httpClient.Dispose();
+            _httpClient?.Dispose();
         }
 
         // This test fails, as the server is unable to correctly handle multiple simultaneous requests
@@ -68,12 +72,12 @@ namespace Betsson.OnlineWallets.SystemTests
 
             for (int i = 0; i < iterations; i++)
             {
-                var task = _httpClient.PostAsJsonAsync("http://localhost:8080/onlinewallet/deposit", depositRequest);
+                var task = _httpClient.PostAsJsonAsync("onlinewallet/deposit", depositRequest);
                 taskList.Add(task);
             }
             await Task.WhenAll(taskList);
 
-            var response = await _httpClient.GetAsync("http://localhost:8080/onlinewallet/balance");
+            var response = await _httpClient.GetAsync("onlinewallet/balance");
             response.EnsureSuccessStatusCode();
             var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
 
@@ -88,7 +92,7 @@ namespace Betsson.OnlineWallets.SystemTests
         public async Task PostWithdraw_MultipleRequests(decimal withdrawAmount, int iterations)
         {
             var depositRequest = new DepositRequest { Amount = iterations * withdrawAmount };
-            var response = await _httpClient.PostAsJsonAsync("http://localhost:8080/onlinewallet/deposit", depositRequest);
+            var response = await _httpClient.PostAsJsonAsync("onlinewallet/deposit", depositRequest);
             response.EnsureSuccessStatusCode();
             var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
             Assert.That(response, Is.Not.Null);
@@ -99,12 +103,12 @@ namespace Betsson.OnlineWallets.SystemTests
 
             for (int i = 0; i < iterations; i++)
             {
-                var task = _httpClient.PostAsJsonAsync("http://localhost:8080/onlinewallet/withdraw", withdrawalRequest);
+                var task = _httpClient.PostAsJsonAsync("onlinewallet/withdraw", withdrawalRequest);
                 taskList.Add(task);
             }
             await Task.WhenAll(taskList);
 
-            response = await _httpClient.GetAsync("http://localhost:8080/onlinewallet/balance");
+            response = await _httpClient.GetAsync("onlinewallet/balance");
             response.EnsureSuccessStatusCode();
             balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
 
@@ -119,7 +123,7 @@ namespace Betsson.OnlineWallets.SystemTests
             decimal firstWithdrawal, decimal secondWithdrawal, decimal initialBalance, decimal expectedNewBalance)
         {
             var depositRequest = new DepositRequest { Amount = initialBalance };
-            var response = await _httpClient.PostAsJsonAsync("http://localhost:8080/onlinewallet/deposit", depositRequest);
+            var response = await _httpClient.PostAsJsonAsync("onlinewallet/deposit", depositRequest);
             response.EnsureSuccessStatusCode();
             var balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
             Assert.That(balanceResponse, Is.Not.Null);
@@ -128,12 +132,12 @@ namespace Betsson.OnlineWallets.SystemTests
             var request1 = new WithdrawalRequest { Amount = firstWithdrawal };
             var request2 = new WithdrawalRequest { Amount = secondWithdrawal };
 
-            var task1 = _httpClient.PostAsJsonAsync("http://localhost:8080/onlinewallet/withdraw", request1);
-            var task2 = _httpClient.PostAsJsonAsync("http://localhost:8080/onlinewallet/withdraw", request2);
+            var task1 = _httpClient.PostAsJsonAsync("onlinewallet/withdraw", request1);
+            var task2 = _httpClient.PostAsJsonAsync("onlinewallet/withdraw", request2);
             await Task.WhenAll(task1, task2);
 
-            var response1 = await task1;
-            var response2 = await task2;
+            var response1 = task1.Result;
+            var response2 = task2.Result;
 
             response1.EnsureSuccessStatusCode();
             Assert.That((int)response2.StatusCode, Is.EqualTo(400),
@@ -146,7 +150,7 @@ namespace Betsson.OnlineWallets.SystemTests
             Assert.That(badRequestResponse, Is.Not.Null);
             Assert.That(badRequestResponse.Type, Is.EqualTo("InsufficientBalanceException"));
 
-            response = await _httpClient.GetAsync("http://localhost:8080/onlinewallet/balance");
+            response = await _httpClient.GetAsync("onlinewallet/balance");
             response.EnsureSuccessStatusCode();
             balanceResponse = await response.Content.ReadFromJsonAsync<BalanceResponse>();
 

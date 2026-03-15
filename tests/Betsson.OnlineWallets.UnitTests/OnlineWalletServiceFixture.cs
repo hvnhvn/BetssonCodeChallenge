@@ -6,6 +6,8 @@ using NSubstitute;
 
 namespace Betsson.OnlineWallets.UnitTests
 {
+    [TestFixture]
+    [Timeout(1500)]
     public class OnlineWalletServiceFixture
     {
         private static readonly object[] GetBalance_PositiveCases =
