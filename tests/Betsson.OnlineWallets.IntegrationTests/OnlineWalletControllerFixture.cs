@@ -9,6 +9,8 @@ using System.Net.Http.Json;
 
 namespace Betsson.OnlineWallets.IntegrationTests
 {
+    [TestFixture]
+    [Timeout(1500)]
     public class OnlineWalletControllerFixture
     {
         private IOnlineWalletRepository? _repositoryMock;
